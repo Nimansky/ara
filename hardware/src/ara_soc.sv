@@ -69,20 +69,23 @@ module ara_soc import axi_pkg::*; import ara_pkg::*; #(
   typedef enum int unsigned {
     L2MEM = 0,
     UART  = 1,
-    CTRL  = 2
+    CTRL  = 2,
+    VTRACE = 3
   } axi_slaves_e;
-  localparam NrAXISlaves = CTRL + 1;
+  localparam NrAXISlaves = VTRACE + 1;
 
   // Memory Map
   // 1GByte of DDR (split between two chips on Genesys2)
   localparam logic [63:0] DRAMLength = 64'h40000000;
   localparam logic [63:0] UARTLength = 64'h1000;
   localparam logic [63:0] CTRLLength = 64'h1000;
+  localparam logic [63:0] VTRACELength = AxiDataWidth * 3; // the buffer always holds exactly 3 fields, each the size of the bus width
 
   typedef enum logic [63:0] {
     DRAMBase = 64'h8000_0000,
     UARTBase = 64'hC000_0000,
-    CTRLBase = 64'hD000_0000
+    CTRLBase = 64'hD000_0000,
+    VTRACEBase = 64'hE000_0000
   } soc_bus_start_e;
 
   ///////////
@@ -114,6 +117,7 @@ module ara_soc import axi_pkg::*; import ara_pkg::*; #(
     axi_user_t)
   `AXI_TYPEDEF_ALL(soc_wide, axi_addr_t, axi_soc_id_t, axi_data_t, axi_strb_t, axi_user_t)
   `AXI_LITE_TYPEDEF_ALL(soc_narrow_lite, axi_addr_t, axi_narrow_data_t, axi_narrow_strb_t)
+  `AXI_LITE_TYPEDEF_ALL(soc_wide_lite, axi_addr_t, axi_data_t, axi_strb_t)
 
   // Buses
   system_req_t  system_axi_req_spill;
@@ -150,6 +154,7 @@ module ara_soc import axi_pkg::*; import ara_pkg::*; #(
 
   axi_pkg::xbar_rule_64_t [NrAXISlaves-1:0] routing_rules;
   assign routing_rules = '{
+    '{idx: VTRACE, start_addr: VTRACEBase, end_addr: VTRACEBase + VTRACELength},
     '{idx: CTRL, start_addr: CTRLBase, end_addr: CTRLBase + CTRLLength},
     '{idx: UART, start_addr: UARTBase, end_addr: UARTBase + UARTLength},
     '{idx: L2MEM, start_addr: DRAMBase, end_addr: DRAMBase + DRAMLength}
@@ -437,6 +442,51 @@ module ara_soc import axi_pkg::*; import ara_pkg::*; #(
     .slv_resp_o(periph_wide_axi_resp[CTRL]  ),
     .mst_req_o (periph_narrow_axi_req[CTRL] ),
     .mst_resp_i(periph_narrow_axi_resp[CTRL])
+  );
+
+  //////////////
+  //  VTRACE  //
+  //////////////
+
+  soc_wide_lite_req_t  axi_lite_vtrace_req;
+  soc_wide_lite_resp_t axi_lite_vtrace_resp;
+
+  axi_to_axi_lite #(
+    .AxiAddrWidth   (AxiAddrWidth          ),
+    .AxiDataWidth   (AxiDataWidth          ),
+    .AxiIdWidth     (AxiSocIdWidth         ),
+    .AxiUserWidth   (AxiUserWidth          ),
+    .AxiMaxReadTxns (1                     ),
+    .AxiMaxWriteTxns(1                     ),
+    .FallThrough    (1'b0                  ),
+    .full_req_t     (soc_wide_req_t        ),
+    .full_resp_t    (soc_wide_resp_t       ),
+    .lite_req_t     (soc_wide_lite_req_t   ),
+    .lite_resp_t    (soc_wide_lite_resp_t  )
+  ) i_axi_to_axi_lite (
+    .clk_i     (clk_i                        ),
+    .rst_ni    (rst_ni                       ),
+    .test_i    (1'b0                         ),
+    .slv_req_i (periph_wide_axi_req[VTRACE]  ),
+    .slv_resp_o(periph_wide_axi_resp[VTRACE] ),
+    .mst_req_o (axi_lite_vtrace_req          ),
+    .mst_resp_i(axi_lite_vtrace_resp         )
+  );
+
+  vtrace_top #(
+    .CVA6Cfg        (CVA6AraConfig         ),
+    .DataWidth      (AxiDataWidth          ),
+    .AddrWidth      (AxiAddrWidth          ),
+    .axi_lite_req_t (soc_wide_lite_req_t   ),
+    .axi_lite_resp_t(soc_wide_lite_resp_t  )
+  ) i_vtrace (
+    .clk_i      (clk_i),
+    .rst_ni     (rst_ni),
+
+    // AXI
+    .axi_lite_slave_req_i (axi_lite_vtrace_req ),
+    .axi_lite_slave_resp_o(axi_lite_vtrace_resp),
+
   );
 
   //////////////

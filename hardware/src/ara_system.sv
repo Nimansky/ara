@@ -53,7 +53,12 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
     parameter type                              system_axi_w_t     = logic,
     parameter type                              system_axi_b_t     = logic,
     parameter type                              system_axi_req_t   = logic,
-    parameter type                              system_axi_resp_t  = logic
+    parameter type                              system_axi_resp_t  = logic,
+    // VTrace interface
+    parameter type                              soc_wide_lite_req_t  = logic,
+    parameter type                              soc_wide_lite_resp_t = logic,
+    // DO NOT change
+    localparam type                   vlen_t       = logic[$clog2(VLEN+1)-1:0],
   ) (
     input  logic                    clk_i,
     input  logic                    rst_ni,
@@ -65,11 +70,107 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
     output logic                    scan_data_o,
     // AXI Interface
     output system_axi_req_t         axi_req_o,
-    input  system_axi_resp_t        axi_resp_i
+    input  system_axi_resp_t        axi_resp_i,
+    // VTRACE AXI interface
+    input soc_wide_lite_req_t        vtrace_axi_req_i,
+    output soc_wide_lite_resp_t      vtrace_axi_resp_o
   );
 
   `include "axi/assign.svh"
   `include "axi/typedef.svh"
+
+  // Interfaces between Ara's dispatcher and Ara's backend
+  typedef struct packed {
+    ara_op_e op; // Operation
+
+    // Stores and slides do not re-shuffle the
+    // source registers. In these two cases, vl refers
+    // to the target EEW and vtype.vsew, respectively.
+    // Since operand requesters work with the old
+    // eew of the source registers, we should rescale
+    // vl to the old eew to fetch the correct number of Bytes.
+    //
+    // Another solution would be to pass directly the target
+    // eew (vstores) or the vtype.vsew (vslides), but this would
+    // create confusion with the current naming convention
+    logic scale_vl;
+
+    // Mask vector register operand
+    logic vm;
+    rvv_pkg::vew_e eew_vmask;
+
+    // 1st vector register operand
+    logic [4:0] vs1;
+    logic use_vs1;
+    opqueue_conversion_e conversion_vs1;
+    rvv_pkg::vew_e eew_vs1;
+    rvv_pkg::vew_e old_eew_vs1;
+
+    // 2nd vector register operand
+    logic [4:0] vs2;
+    logic use_vs2;
+    opqueue_conversion_e conversion_vs2;
+    rvv_pkg::vew_e eew_vs2;
+
+    // Use vd as an operand as well (e.g., vmacc)
+    logic use_vd_op;
+    rvv_pkg::vew_e eew_vd_op;
+
+    // Scalar operand
+    elen_t scalar_op;
+    logic use_scalar_op;
+
+    // 2nd scalar operand: stride for constant-strided vector load/stores, slide offset for vector
+    // slides
+    elen_t stride;
+    logic is_stride_np2;
+
+    // Destination vector register
+    logic [4:0] vd;
+    logic use_vd;
+
+    // If asserted: vs2 is kept in MulFPU opqueue C, and vd_op in MulFPU A
+    logic swap_vs2_vd_op;
+
+    // Effective length multiplier
+    rvv_pkg::vlmul_e emul;
+
+    // Number of segments in segment mem op
+    logic [2:0] nf;
+
+    // Is this a fault-only-first load?
+    logic fault_only_first;
+
+    // Rounding-Mode for FP operations
+    fpnew_pkg::roundmode_e fp_rm;
+    // Widen FP immediate (re-encoding)
+    logic wide_fp_imm;
+    // Resizing of FP conversions
+    resize_e cvt_resize;
+
+    // Vector machine metadata
+    vlen_t vl;
+    vlen_t vstart;
+    rvv_pkg::vtype_t vtype;
+
+    // Request token, for registration in the sequencer
+    logic token;
+  } ara_req_t;
+
+  typedef struct packed {
+    // Scalar response
+    elen_t resp;
+
+    // Instruction triggered an exception
+    exception_t exception;
+
+    // Fault-only-first exception on element whose idx > 0
+    logic fof_exception;
+
+    // New value for vstart
+    vlen_t exception_vstart;
+  } ara_resp_t;
+
 
   ///////////
   //  AXI  //
@@ -93,6 +194,8 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
   logic              [AxiAddrWidth-1:0] inval_addr;
   logic                                 inval_valid;
   logic                                 inval_ready;
+
+  assign vtrace_acc_req_o = acc_req;
 
   // Support max 8 cores, for now
   logic [63:0] hart_id;
@@ -220,6 +323,8 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
 `endif
   );
 
+  ara_req_t vtrace_ara_req;
+
   ara #(
     .NrLanes           (NrLanes           ),
     .VLEN              (VLEN              ),
@@ -236,6 +341,8 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
     .acc_mmu_resp_t    (acc_mmu_resp_t    ),
     .cva6_to_acc_t     (cva6_to_acc_t     ),
     .acc_to_cva6_t     (acc_to_cva6_t     ),
+    .ara_req_t         (ara_req_t         ),
+    .ara_resp_t        (ara_resp_t        ),
     .AxiDataWidth      (AxiWideDataWidth  ),
     .AxiAddrWidth      (AxiAddrWidth      ),
     .axi_ar_t          (ara_axi_ar_t      ),
@@ -254,7 +361,8 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
     .acc_req_i       (acc_req       ),
     .acc_resp_o      (acc_resp      ),
     .axi_req_o       (ara_axi_req   ),
-    .axi_resp_i      (ara_axi_resp  )
+    .axi_resp_i      (ara_axi_resp  ),
+    .ara_req_o       (vtrace_ara_req)
   );
 
   axi_mux #(
@@ -286,6 +394,27 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
     .slv_resps_o({ara_axi_resp_inval, ariane_axi_resp}),
     .mst_req_o  (axi_req_o                            ),
     .mst_resp_i (axi_resp_i                           )
+  );
+
+  vtrace_top #(
+    .CVA6Cfg        (CVA6AraConfig         ),
+    .DataWidth      (AxiDataWidth          ),
+    .AddrWidth      (AxiAddrWidth          ),
+    .axi_lite_req_t (soc_wide_lite_req_t   ),
+    .axi_lite_resp_t(soc_wide_lite_resp_t  ),
+    .accelerator_req_t (cva6_to_acc_t      ),
+    .ara_req_t      (ara_req_t             )
+  ) i_vtrace (
+    .clk_i      (clk_i),
+    .rst_ni     (rst_ni),
+
+    // AXI
+    .axi_lite_slave_req_i (axi_lite_vtrace_req ),
+    .axi_lite_slave_resp_o(axi_lite_vtrace_resp),
+
+    // CVA6/Ara interface
+    .acc_req_i   (acc_req),
+    .ara_req_i   (vtrace_ara_req)
   );
 
 endmodule : ara_system

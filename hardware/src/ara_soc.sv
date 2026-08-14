@@ -451,6 +451,7 @@ module ara_soc import axi_pkg::*; import ara_pkg::*; #(
   soc_wide_lite_req_t  axi_lite_vtrace_req;
   soc_wide_lite_resp_t axi_lite_vtrace_resp;
 
+
   axi_to_axi_lite #(
     .AxiAddrWidth   (AxiAddrWidth          ),
     .AxiDataWidth   (AxiDataWidth          ),
@@ -471,22 +472,6 @@ module ara_soc import axi_pkg::*; import ara_pkg::*; #(
     .slv_resp_o(periph_wide_axi_resp[VTRACE] ),
     .mst_req_o (axi_lite_vtrace_req          ),
     .mst_resp_i(axi_lite_vtrace_resp         )
-  );
-
-  vtrace_top #(
-    .CVA6Cfg        (CVA6AraConfig         ),
-    .DataWidth      (AxiDataWidth          ),
-    .AddrWidth      (AxiAddrWidth          ),
-    .axi_lite_req_t (soc_wide_lite_req_t   ),
-    .axi_lite_resp_t(soc_wide_lite_resp_t  )
-  ) i_vtrace (
-    .clk_i      (clk_i),
-    .rst_ni     (rst_ni),
-
-    // AXI
-    .axi_lite_slave_req_i (axi_lite_vtrace_req ),
-    .axi_lite_slave_resp_o(axi_lite_vtrace_resp),
-
   );
 
   //////////////
@@ -585,7 +570,9 @@ module ara_soc import axi_pkg::*; import ara_pkg::*; #(
     .system_axi_r_t    (system_r_chan_t      ),
     .system_axi_w_t    (system_w_chan_t      ),
     .system_axi_req_t  (system_req_t         ),
-    .system_axi_resp_t (system_resp_t        ))
+    .system_axi_resp_t (system_resp_t        ),
+    .soc_wide_lite_req_t(soc_wide_lite_req_t   ),
+    .soc_wide_lite_resp_t(soc_wide_lite_resp_t ))
 `else
   ara_system
 `endif
@@ -597,6 +584,8 @@ module ara_soc import axi_pkg::*; import ara_pkg::*; #(
     .scan_enable_i(1'b0                     ),
     .scan_data_i  (1'b0                     ),
     .scan_data_o  (/* Unconnected */        ),
+    .vtrace_axi_req_i (axi_lite_vtrace_req           ),
+    .vtrace_axi_resp_o(axi_lite_vtrace_resp          ),
 `ifndef TARGET_GATESIM
     .axi_req_o    (system_axi_req           ),
     .axi_resp_i   (system_axi_resp          )

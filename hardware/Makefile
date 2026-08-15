@@ -11,6 +11,7 @@ INSTALL_DIR := $(abspath $(ROOT_DIR)/../install)
 VERILATOR_INCLUDE := $(INSTALL_DIR)/verilator/share/verilator/include/vltstd
 
 BENDER         := $(ROOT_DIR)/../hardware/bender
+BENDER_MANIFEST ?= $(ROOT_DIR)/../Bender.yml
 BENDER_VERSION := 0.31.0
 
 # Choose Ara's configuration
@@ -129,7 +130,7 @@ $(BENDER):
 	curl --proto '=https' --tlsv1.2 https://pulp-platform.github.io/bender/init -sSf | sh	-s -- $(BENDER_VERSION)
 	@echo "$$(./bender --version) available."
 
-update: $(BENDER) $(ROOT_DIR)/../Bender.yml
+update: $(BENDER) $(BENDER_MANIFEST)
 	rm -rf $(ROOT_DIR)/../hardware/deps/*
 	$(BENDER) update -f
 	$(BENDER) checkout
@@ -151,7 +152,7 @@ $(buildpath)/$(library):
 # Compilation
 .PHONY: compile
 compile: dpi lib $(buildpath) bender $(buildpath)/compile_$(config).tcl
-$(buildpath)/compile_$(config).tcl: $(config_file) Makefile ../Bender.yml $(shell find src -type f) $(shell find ../config -type f) $(shell find include -type f) $(shell find tb -type f) $(shell find deps -type f)
+$(buildpath)/compile_$(config).tcl: $(config_file) Makefile $(BENDER_MANIFEST) $(shell find src -type f) $(shell find ../config -type f) $(shell find include -type f) $(shell find tb -type f) $(shell find deps -type f)
 	$(BENDER) script vsim --vlog-arg="$(vlog_args)" $(bender_targs_simc) $(bender_defs) > $(buildpath)/compile_$(config).tcl
 	echo "exit" >> $(buildpath)/compile_$(config).tcl
 	cd $(buildpath) && $(questa_cmd) vsim -work $(library) -c -do compile_$(config).tcl
@@ -182,9 +183,9 @@ tests := $(ara_tests) $(cva6_tests)
 .PHONY: verilate
 verilate: $(buildpath) bender $(veril_library)/V$(veril_top)
 
-$(veril_library)/V$(veril_top): $(config_file) Makefile ../Bender.yml $(shell find src -type f) $(shell find ../config -type f) $(shell find include -type f) $(shell find tb -type f) $(shell find deps -type f)
+$(veril_library)/V$(veril_top): $(config_file) Makefile $(BENDER_MANIFEST) $(shell find src -type f) $(shell find ../config -type f) $(shell find include -type f) $(shell find tb -type f) $(shell find deps -type f)
 	rm -rf $(veril_library); mkdir -p $(veril_library)
-	$(BENDER) script flist-plus $(bender_targs_veril) $(bender_defs_veril) > $(veril_library)/bender_script_$(config)
+	$(BENDER) script flist-plus -d $(dir $(BENDER_MANIFEST)) $(bender_targs_veril) $(bender_defs_veril) > $(veril_library)/bender_script_$(config)
 # Verilate the design
 	$(veril_path)/verilator -f $(veril_library)/bender_script_$(config)           \
   -GNrLanes=$(nr_lanes)                                                         \

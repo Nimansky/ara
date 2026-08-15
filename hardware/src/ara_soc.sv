@@ -464,7 +464,7 @@ module ara_soc import axi_pkg::*; import ara_pkg::*; #(
     .full_resp_t    (soc_wide_resp_t       ),
     .lite_req_t     (soc_wide_lite_req_t   ),
     .lite_resp_t    (soc_wide_lite_resp_t  )
-  ) i_axi_to_axi_lite (
+  ) i_vtrace_axi_to_axi_lite (
     .clk_i     (clk_i                        ),
     .rst_ni    (rst_ni                       ),
     .test_i    (1'b0                         ),

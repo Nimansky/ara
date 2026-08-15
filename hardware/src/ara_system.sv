@@ -58,7 +58,7 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
     parameter type                              soc_wide_lite_req_t  = logic,
     parameter type                              soc_wide_lite_resp_t = logic,
     // DO NOT change
-    localparam type                   vlen_t       = logic[$clog2(VLEN+1)-1:0],
+    localparam type                   vlen_t       = logic[$clog2(VLEN+1)-1:0]
   ) (
     input  logic                    clk_i,
     input  logic                    rst_ni,
@@ -194,8 +194,6 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
   logic              [AxiAddrWidth-1:0] inval_addr;
   logic                                 inval_valid;
   logic                                 inval_ready;
-
-  assign vtrace_acc_req_o = acc_req;
 
   // Support max 8 cores, for now
   logic [63:0] hart_id;
@@ -399,9 +397,8 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
   );
 
   vtrace_top #(
-    .CVA6Cfg        (CVA6AraConfig         ),
-    .DataWidth      (AxiDataWidth          ),
-    .AddrWidth      (AxiAddrWidth          ),
+    .CVA6Cfg        (CVA6Cfg         ),
+    .DataWidth      (AxiWideDataWidth      ),
     .axi_lite_req_t (soc_wide_lite_req_t   ),
     .axi_lite_resp_t(soc_wide_lite_resp_t  ),
     .accelerator_req_t (cva6_to_acc_t      ),
@@ -412,8 +409,8 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
     .rst_ni     (rst_ni),
 
     // AXI
-    .axi_lite_slave_req_i (axi_lite_vtrace_req ),
-    .axi_lite_slave_resp_o(axi_lite_vtrace_resp),
+    .axi_lite_slave_req_i (vtrace_axi_req_i ),
+    .axi_lite_slave_resp_o(vtrace_axi_resp_o),
 
     // CVA6/Ara interface
     .acc_req_i   (acc_req),

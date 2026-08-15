@@ -324,6 +324,7 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
   );
 
   ara_req_t vtrace_ara_req;
+  logic vtrace_ara_req_valid;
 
   ara #(
     .NrLanes           (NrLanes           ),
@@ -362,7 +363,8 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
     .acc_resp_o      (acc_resp      ),
     .axi_req_o       (ara_axi_req   ),
     .axi_resp_i      (ara_axi_resp  ),
-    .ara_req_o       (vtrace_ara_req)
+    .ara_req_o       (vtrace_ara_req),
+    .ara_req_valid_o (vtrace_ara_req_valid)
   );
 
   axi_mux #(
@@ -403,6 +405,7 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
     .axi_lite_req_t (soc_wide_lite_req_t   ),
     .axi_lite_resp_t(soc_wide_lite_resp_t  ),
     .accelerator_req_t (cva6_to_acc_t      ),
+    .accelerator_resp_t (acc_to_cva6_t     ),
     .ara_req_t      (ara_req_t             )
   ) i_vtrace (
     .clk_i      (clk_i),
@@ -414,7 +417,9 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
 
     // CVA6/Ara interface
     .acc_req_i   (acc_req),
-    .ara_req_i   (vtrace_ara_req)
+    .acc_resp_i  (acc_resp),
+    .ara_req_i   (vtrace_ara_req),
+    .ara_req_valid_i (vtrace_ara_req_valid)
   );
 
 endmodule : ara_system

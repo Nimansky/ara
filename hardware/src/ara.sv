@@ -64,7 +64,8 @@ module ara import ara_pkg::*; #(
     output axi_req_t          axi_req_o,
     input  axi_resp_t         axi_resp_i,
     // VTRACE interface
-    output ara_req_t      ara_req_o
+    output ara_req_t      ara_req_o,
+    output logic          ara_req_valid_o
   );
 
   `include "common_cells/registers.svh"
@@ -112,6 +113,7 @@ module ara import ara_pkg::*; #(
   logic [NrLanes-1:0] lsu_ex_flush_stu;
 
   assign ara_req_o       = ara_req;
+  assign ara_req_valid_o = ara_req_valid;
 
   ara_dispatcher #(
     .CVA6Cfg           (CVA6Cfg           ),

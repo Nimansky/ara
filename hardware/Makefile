@@ -190,8 +190,8 @@ $(veril_library)/V$(veril_top): $(config_file) Makefile $(BENDER_MANIFEST) $(she
 	$(veril_path)/verilator -f $(veril_library)/bender_script_$(config)           \
   -GNrLanes=$(nr_lanes)                                                         \
   -GVLEN=$(vlen)                                                                \
-  -O3                                                                           \
-  $(if $(trace),,--hierarchical) \
+  $(if $(trace),-O0,-O3) 														\
+  $(if $(trace),,--hierarchical)												 \
   -Wno-fatal                                                                    \
   -Wno-PINCONNECTEMPTY                                                          \
   -Wno-BLKANDNBLK                                                               \

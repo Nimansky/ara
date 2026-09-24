@@ -55,8 +55,10 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
     parameter type                              system_axi_req_t   = logic,
     parameter type                              system_axi_resp_t  = logic,
     // VTrace interface
-    parameter type                              soc_wide_lite_req_t  = logic,
-    parameter type                              soc_wide_lite_resp_t = logic,
+    parameter type                              soc_narrow_lite_req_t  = logic,
+    parameter type                              soc_narrow_lite_resp_t = logic,
+    // VTRACE buffer base address
+    parameter int                       unsigned vtrace_buffer_base = 32'hE0000000,
     // DO NOT change
     localparam type                   vlen_t       = logic[$clog2(VLEN+1)-1:0]
   ) (
@@ -72,8 +74,9 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
     output system_axi_req_t         axi_req_o,
     input  system_axi_resp_t        axi_resp_i,
     // VTRACE AXI interface
-    input soc_wide_lite_req_t        vtrace_axi_req_i,
-    output soc_wide_lite_resp_t      vtrace_axi_resp_o
+    input soc_narrow_lite_req_t        vtrace_axi_req_i,
+    output soc_narrow_lite_resp_t      vtrace_axi_resp_o
+    
   );
 
   `include "axi/assign.svh"
@@ -194,6 +197,8 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
   logic              [AxiAddrWidth-1:0] inval_addr;
   logic                                 inval_valid;
   logic                                 inval_ready;
+  logic              [CVA6Cfg.XLEN-1:0] vtrace_pc;
+
 
   // Support max 8 cores, for now
   logic [63:0] hart_id;
@@ -258,6 +263,7 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
     // Accelerator ports
     .cvxif_req_o      (acc_req                 ),
     .cvxif_resp_i     (acc_resp_pack           ),
+    .vtrace_pc_o      (vtrace_pc               ), 
     .noc_req_o        (ariane_narrow_axi_req   ),
     .noc_resp_i       (ariane_narrow_axi_resp  )
   );
@@ -398,12 +404,13 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
 
   vtrace_top #(
     .CVA6Cfg        (CVA6Cfg         ),
-    .DataWidth      (AxiWideDataWidth      ),
-    .axi_lite_req_t (soc_wide_lite_req_t   ),
-    .axi_lite_resp_t(soc_wide_lite_resp_t  ),
+    .DataWidth      (AxiNarrowDataWidth      ),
+    .axi_lite_req_t (soc_narrow_lite_req_t   ),
+    .axi_lite_resp_t(soc_narrow_lite_resp_t  ),
     .accelerator_req_t (cva6_to_acc_t      ),
     .accelerator_resp_t (acc_to_cva6_t     ),
-    .ara_req_t      (ara_req_t             )
+    .ara_req_t      (ara_req_t             ),
+    .vtrace_buffer_base(vtrace_buffer_base            )
   ) i_vtrace (
     .clk_i      (clk_i),
     .rst_ni     (rst_ni),
@@ -415,6 +422,7 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
     // CVA6/Ara interface
     .acc_req_i   (acc_req),
     .acc_resp_i  (acc_resp),
+    .cva6_pc_i    (vtrace_pc),
     .ara_req_i   (vtrace_ara_req),
     .ara_req_valid_i (vtrace_ara_req_valid)
   );

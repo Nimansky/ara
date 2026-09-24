@@ -117,7 +117,6 @@ module ara_soc import axi_pkg::*; import ara_pkg::*; #(
     axi_user_t)
   `AXI_TYPEDEF_ALL(soc_wide, axi_addr_t, axi_soc_id_t, axi_data_t, axi_strb_t, axi_user_t)
   `AXI_LITE_TYPEDEF_ALL(soc_narrow_lite, axi_addr_t, axi_narrow_data_t, axi_narrow_strb_t)
-  `AXI_LITE_TYPEDEF_ALL(soc_wide_lite, axi_addr_t, axi_data_t, axi_strb_t)
 
   // Buses
   system_req_t  system_axi_req_spill;
@@ -448,30 +447,56 @@ module ara_soc import axi_pkg::*; import ara_pkg::*; #(
   //  VTRACE  //
   //////////////
 
-  soc_wide_lite_req_t  axi_lite_vtrace_req;
-  soc_wide_lite_resp_t axi_lite_vtrace_resp;
+  soc_narrow_lite_req_t  axi_lite_vtrace_req;
+  soc_narrow_lite_resp_t axi_lite_vtrace_resp;
 
 
   axi_to_axi_lite #(
     .AxiAddrWidth   (AxiAddrWidth          ),
-    .AxiDataWidth   (AxiDataWidth          ),
+    .AxiDataWidth   (AxiNarrowDataWidth    ),
     .AxiIdWidth     (AxiSocIdWidth         ),
     .AxiUserWidth   (AxiUserWidth          ),
     .AxiMaxReadTxns (1                     ),
     .AxiMaxWriteTxns(1                     ),
     .FallThrough    (1'b0                  ),
-    .full_req_t     (soc_wide_req_t        ),
-    .full_resp_t    (soc_wide_resp_t       ),
-    .lite_req_t     (soc_wide_lite_req_t   ),
-    .lite_resp_t    (soc_wide_lite_resp_t  )
+    .full_req_t     (soc_narrow_req_t      ),
+    .full_resp_t    (soc_narrow_resp_t     ),
+    .lite_req_t     (soc_narrow_lite_req_t ),
+    .lite_resp_t    (soc_narrow_lite_resp_t)
   ) i_vtrace_axi_to_axi_lite (
     .clk_i     (clk_i                        ),
     .rst_ni    (rst_ni                       ),
     .test_i    (1'b0                         ),
-    .slv_req_i (periph_wide_axi_req[VTRACE]  ),
-    .slv_resp_o(periph_wide_axi_resp[VTRACE] ),
+    .slv_req_i (periph_narrow_axi_req[VTRACE]  ),
+    .slv_resp_o(periph_narrow_axi_resp[VTRACE] ),
     .mst_req_o (axi_lite_vtrace_req          ),
     .mst_resp_i(axi_lite_vtrace_resp         )
+  );
+
+  axi_dw_converter #(
+    .AxiSlvPortDataWidth(AxiWideDataWidth    ),
+    .AxiMstPortDataWidth(AxiNarrowDataWidth  ),
+    .AxiAddrWidth       (AxiAddrWidth        ),
+    .AxiIdWidth         (AxiSocIdWidth       ),
+    .AxiMaxReads        (2                   ),
+    .ar_chan_t          (soc_wide_ar_chan_t  ),
+    .mst_r_chan_t       (soc_narrow_r_chan_t ),
+    .slv_r_chan_t       (soc_wide_r_chan_t   ),
+    .aw_chan_t          (soc_narrow_aw_chan_t),
+    .b_chan_t           (soc_narrow_b_chan_t ),
+    .mst_w_chan_t       (soc_narrow_w_chan_t ),
+    .slv_w_chan_t       (soc_wide_w_chan_t   ),
+    .axi_mst_req_t      (soc_narrow_req_t    ),
+    .axi_mst_resp_t     (soc_narrow_resp_t   ),
+    .axi_slv_req_t      (soc_wide_req_t      ),
+    .axi_slv_resp_t     (soc_wide_resp_t     )
+    ) i_axi_slave_vtrace_dwc (
+    .clk_i     (clk_i                       ),
+    .rst_ni    (rst_ni                      ),
+    .slv_req_i (periph_wide_axi_req[VTRACE]   ),
+    .slv_resp_o(periph_wide_axi_resp[VTRACE]  ),
+    .mst_req_o (periph_narrow_axi_req[VTRACE] ),
+    .mst_resp_i(periph_narrow_axi_resp[VTRACE])
   );
 
   //////////////
@@ -571,8 +596,9 @@ module ara_soc import axi_pkg::*; import ara_pkg::*; #(
     .system_axi_w_t    (system_w_chan_t      ),
     .system_axi_req_t  (system_req_t         ),
     .system_axi_resp_t (system_resp_t        ),
-    .soc_wide_lite_req_t(soc_wide_lite_req_t   ),
-    .soc_wide_lite_resp_t(soc_wide_lite_resp_t ))
+    .soc_narrow_lite_req_t(soc_narrow_lite_req_t   ),
+    .soc_narrow_lite_resp_t(soc_narrow_lite_resp_t ),
+    .vtrace_buffer_base(VTRACEBase                     ))
 `else
   ara_system
 `endif
